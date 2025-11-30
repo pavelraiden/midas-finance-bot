@@ -36,7 +36,7 @@
 - Best Wallet
 
 **Implementation:**
-- Use Moralis API (key provided: ***REMOVED_MORALIS_API_KEY***
+- Use Moralis API (key in .env: MORALIS_API_KEY)
 - Use TronGrid for TRON network
 - Monitor wallet addresses:
   - TUAWUDwPxhVUeMBcNZMRNCns9GNjXzi4Hv
@@ -66,7 +66,7 @@
 
 ### 4. AI Finance Analysis with DeepSeek
 
-**DeepSeek API Key:** ***REMOVED_DEEPSEEK_API_KEY***
+**DeepSeek API Key:** (stored in .env: DEEPSEEK_API_KEY)
 
 **Requirements:**
 - Use DeepSeek latest model with deep thinking
@@ -182,7 +182,7 @@ Or provide details:
 
 **Supabase:**
 - URL: https://uwsroinzalaauretfutm.supabase.co/
-- Service Role Key: ***REMOVED_MORALIS_API_KEY***
+- Service Role Key: (stored in .env: SUPABASE_SERVICE_ROLE_KEY)
 - MCP connection available
 
 **Data retention:**

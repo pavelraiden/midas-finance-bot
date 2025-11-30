@@ -1,7 +1,7 @@
 # Midas Financial Bot - Restoration Status
 
 **Date:** 2025-11-27  
-**Bot:** @MidasFina_bot (ID: ***REMOVED_BOT_ID***)  
+**Bot:** @MidasFina_bot  
 **Status:** ✅ RUNNING (PID: 4611)
 
 ---
@@ -86,7 +86,7 @@
 **Domain entities:** 3  
 **Utils:** 2  
 
-**Bot Token:** ***REMOVED_BOT_ID***:AAEQ7UWu3DK3lYRYDkabYjqwUXqV1KLd8fc  
+**Bot Token:** (stored in .env: TELEGRAM_BOT_TOKEN)  
 **DeepSeek API:** Configured via env variable  
 **Supabase:** Configured but not used (using mock services)
 
