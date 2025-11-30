@@ -62,7 +62,10 @@ class SyncService:
         
         for tx in transactions:
             # Check if transaction already exists (by hash)
-            # TODO: Implement duplicate detection
+            existing_tx = await self.transaction_repo.get_by_hash(tx.hash)
+            if existing_tx:
+                logger.debug(f"Skipping duplicate transaction: {tx.hash}")
+                continue
             
             # Detect if this is a transfer between user's wallets
             is_transfer = await self._detect_transfer(user_id, tx)
@@ -167,11 +170,26 @@ class SyncService:
         category_name = ai_result.get('category', 'Uncategorized')
         confidence = ai_result.get('confidence', 0)
         
-        # TODO: Map category name to category_id
-        # For now, return None and low confidence
+        # Map category name to category_id
+        category = await self.category_repo.get_by_name(user_id, category_name)
+        category_id = category.id if category else None
+        
+        if not category_id:
+            logger.warning(f"Category not found: {category_name}. Creating new category.")
+            # Create new category if not exists
+            from src.domain.category import Category
+            new_category = Category(
+                user_id=user_id,
+                name=category_name,
+                type='expense',  # Default to expense
+                icon='❓',  # Default icon
+                color='#808080'  # Default gray color
+            )
+            category_id = await self.category_repo.create(new_category)
+        
         logger.info(f"AI categorization: {merchant_name} -> {category_name} ({confidence}%)")
         
-        return None, confidence
+        return category_id, confidence
     
     async def _create_transaction(
         self,
