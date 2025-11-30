@@ -35,10 +35,16 @@ class DeepSeekWorker:
     
     Features:
     - Async task processing
+    - Confidence-based auto-confirmation
     - Error handling and retry
     - Task result caching
     - Graceful shutdown
     """
+    
+    # Confidence thresholds (from AI Council recommendations)
+    HIGH_CONFIDENCE_THRESHOLD = 0.95  # Auto-confirm if >= 95%
+    MEDIUM_CONFIDENCE_THRESHOLD = 0.70  # Request confirmation if >= 70%
+    LOW_CONFIDENCE_THRESHOLD = 0.50  # Suggest manual review if < 50%
     
     def __init__(self, redis_url: Optional[str] = None, db_path: Optional[str] = None):
         """
@@ -165,18 +171,40 @@ class DeepSeekWorker:
             import json
             result = json.loads(response)
             
-            # 5. Handle merchant mapping if suggested
-            if "new_merchant_mapping" in result and result["new_merchant_mapping"]:
-                mapping = result["new_merchant_mapping"]
-                try:
-                    await self.merchant_repo.create({
-                        "user_id": user_id,
-                        "merchant_name": mapping.get("merchant_name"),
-                        "category": mapping.get("suggested_category")
-                    })
-                    logger.info(f"✅ Saved new merchant mapping: {mapping.get('merchant_name')} → {mapping.get('suggested_category')}")
-                except Exception as e:
-                    logger.error(f"Failed to save merchant mapping: {e}")
+            # 5. Determine confidence level and action
+            confidence = result.get("confidence", 0.0)
+            
+            if confidence >= self.HIGH_CONFIDENCE_THRESHOLD:
+                # High confidence - auto-confirm
+                result["auto_confirmed"] = True
+                result["requires_confirmation"] = False
+                logger.info(f"✅ High confidence ({confidence:.2%}) - auto-confirmed: {result.get('category')}")
+                
+                # Handle merchant mapping if suggested
+                if "new_merchant_mapping" in result and result["new_merchant_mapping"]:
+                    mapping = result["new_merchant_mapping"]
+                    try:
+                        await self.merchant_repo.create({
+                            "user_id": user_id,
+                            "merchant_name": mapping.get("merchant_name"),
+                            "category": mapping.get("suggested_category")
+                        })
+                        logger.info(f"✅ Saved new merchant mapping: {mapping.get('merchant_name')} → {mapping.get('suggested_category')}")
+                    except Exception as e:
+                        logger.error(f"Failed to save merchant mapping: {e}")
+            
+            elif confidence >= self.MEDIUM_CONFIDENCE_THRESHOLD:
+                # Medium confidence - request confirmation
+                result["auto_confirmed"] = False
+                result["requires_confirmation"] = True
+                logger.info(f"⚠️ Medium confidence ({confidence:.2%}) - requesting user confirmation")
+            
+            else:
+                # Low confidence - suggest manual review
+                result["auto_confirmed"] = False
+                result["requires_confirmation"] = True
+                result["suggest_manual_review"] = True
+                logger.warning(f"❌ Low confidence ({confidence:.2%}) - suggesting manual review")
             
             return result
         except json.JSONDecodeError:
