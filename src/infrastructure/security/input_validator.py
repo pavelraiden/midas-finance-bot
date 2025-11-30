@@ -1,16 +1,23 @@
 """
-Input Validation Layer using Pydantic
+Input Validation Layer using Pydantic v2
 Validates all user inputs to prevent injection attacks and ensure data integrity
 """
 from typing import Optional
 from decimal import Decimal
 from datetime import datetime
-from pydantic import BaseModel, validator, Field
+from pydantic import BaseModel, field_validator, Field, ConfigDict
 from src.infrastructure.error_handling.exceptions import ValidationError
 
 
 class TransactionInput(BaseModel):
     """Validation model for transaction creation."""
+    
+    model_config = ConfigDict(
+        json_encoders={
+            Decimal: str,
+            datetime: lambda v: v.isoformat()
+        }
+    )
     
     amount: Decimal = Field(..., gt=0, description="Transaction amount must be positive")
     description: str = Field(..., min_length=1, max_length=500)
@@ -19,7 +26,8 @@ class TransactionInput(BaseModel):
     currency: str = Field(default="USD", min_length=3, max_length=3)
     transaction_date: Optional[datetime] = None
     
-    @validator('description')
+    @field_validator('description')
+    @classmethod
     def description_must_not_be_empty(cls, v):
         v = v.strip()
         if not v:
@@ -31,7 +39,8 @@ class TransactionInput(BaseModel):
         
         return v
     
-    @validator('currency')
+    @field_validator('currency')
+    @classmethod
     def currency_must_be_valid(cls, v):
         valid_currencies = ['USD', 'EUR', 'USDT', 'USDC', 'RUB']
         v = v.upper()
@@ -39,19 +48,14 @@ class TransactionInput(BaseModel):
             raise ValidationError(f"Invalid currency. Must be one of: {', '.join(valid_currencies)}")
         return v
     
-    @validator('amount')
+    @field_validator('amount')
+    @classmethod
     def amount_must_be_reasonable(cls, v):
         if v > Decimal('1000000'):
             raise ValidationError("Amount exceeds maximum allowed value")
         if v < Decimal('0.01'):
             raise ValidationError("Amount is too small")
         return v
-    
-    class Config:
-        json_encoders = {
-            Decimal: str,
-            datetime: lambda v: v.isoformat()
-        }
 
 
 class AccountInput(BaseModel):
@@ -62,7 +66,8 @@ class AccountInput(BaseModel):
     currency: str = Field(default="USD", min_length=3, max_length=3)
     initial_balance: Decimal = Field(default=Decimal('0'), ge=0)
     
-    @validator('name')
+    @field_validator('name')
+    @classmethod
     def name_must_be_valid(cls, v):
         v = v.strip()
         if not v:
@@ -73,7 +78,8 @@ class AccountInput(BaseModel):
         
         return v
     
-    @validator('account_type')
+    @field_validator('account_type')
+    @classmethod
     def account_type_must_be_valid(cls, v):
         valid_types = ['trustee_usdt', 'trustee_usdc', 'trustee_eur', 'bank', 'cash', 'crypto']
         v = v.lower()
@@ -86,11 +92,12 @@ class CategoryInput(BaseModel):
     """Validation model for category creation."""
     
     name: str = Field(..., min_length=1, max_length=100)
-    category_type: str = Field(..., regex='^(expense|income)$')
+    category_type: str = Field(..., pattern='^(expense|income)$')
     icon: Optional[str] = Field(None, max_length=10)
-    color: Optional[str] = Field(None, regex='^#[0-9A-Fa-f]{6}$')
+    color: Optional[str] = Field(None, pattern='^#[0-9A-Fa-f]{6}$')
     
-    @validator('name')
+    @field_validator('name')
+    @classmethod
     def name_must_be_valid(cls, v):
         v = v.strip()
         if not v:
@@ -103,10 +110,11 @@ class UserInput(BaseModel):
     
     telegram_id: int = Field(..., gt=0)
     username: Optional[str] = Field(None, max_length=100)
-    language: str = Field(default="en", regex='^(en|ru)$')
+    language: str = Field(default="en", pattern='^(en|ru)$')
     timezone: str = Field(default="UTC", max_length=50)
     
-    @validator('telegram_id')
+    @field_validator('telegram_id')
+    @classmethod
     def telegram_id_must_be_valid(cls, v):
         if v < 1:
             raise ValidationError("Invalid Telegram ID")
@@ -114,7 +122,8 @@ class UserInput(BaseModel):
             raise ValidationError("Telegram ID too large")
         return v
     
-    @validator('username')
+    @field_validator('username')
+    @classmethod
     def username_must_be_valid(cls, v):
         if v is None:
             return v
@@ -137,7 +146,8 @@ class BalanceSnapshotInput(BaseModel):
     currency: str = Field(default="USD", min_length=3, max_length=3)
     snapshot_time: Optional[datetime] = None
     
-    @validator('balance')
+    @field_validator('balance')
+    @classmethod
     def balance_can_be_negative(cls, v):
         if v < Decimal('-1000000'):
             raise ValidationError("Balance is unreasonably low")
