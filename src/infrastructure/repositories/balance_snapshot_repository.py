@@ -8,7 +8,7 @@ from decimal import Decimal
 import logging
 
 from .base import BaseRepository
-from ...domain.balance.balance_snapshot import BalanceSnapshot, BalanceDelta
+from src.domain.balance.balance_snapshot import BalanceSnapshot, BalanceDelta
 
 logger = logging.getLogger(__name__)
 
