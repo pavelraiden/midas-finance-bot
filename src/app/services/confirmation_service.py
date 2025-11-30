@@ -1,9 +1,12 @@
 """
 Confirmation Service
 Handles user confirmation requests for low-confidence AI categorizations
+Now with Redis persistence for reliability and horizontal scaling
 """
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+import json
+import redis.asyncio as redis
 from infrastructure.logging_config import get_logger
 from infrastructure.repositories.transaction_repository import TransactionRepository
 from infrastructure.repositories.category_repository import CategoryRepository
@@ -14,27 +17,32 @@ logger = get_logger(__name__)
 
 class ConfirmationService:
     """
-    Service for managing user confirmation requests.
+    Service for managing user confirmation requests with Redis persistence.
     
     Features:
-    - Store pending confirmations
+    - Store pending confirmations in Redis with TTL
     - Generate confirmation messages
     - Process user responses
     - Learn from corrections (update merchant mappings)
+    - Horizontal scaling support
     """
     
     def __init__(
         self,
         transaction_repo: TransactionRepository,
         category_repo: CategoryRepository,
-        merchant_repo: MerchantRepository
+        merchant_repo: MerchantRepository,
+        redis_client: redis.Redis
     ):
         self.transaction_repo = transaction_repo
         self.category_repo = category_repo
         self.merchant_repo = merchant_repo
+        self.redis = redis_client
         
-        # In-memory pending confirmations (in production, use Redis)
-        self.pending_confirmations: Dict[str, Dict[str, Any]] = {}
+        # Redis key prefix for confirmations
+        self.CONFIRMATION_PREFIX = "confirmation:"
+        self.USER_PENDING_PREFIX = "user_pending:"
+        self.CONFIRMATION_TTL = 86400  # 24 hours
     
     async def create_confirmation_request(
         self,
@@ -43,7 +51,7 @@ class ConfirmationService:
         ai_suggestion: Dict[str, Any]
     ) -> str:
         """
-        Create a new confirmation request.
+        Create a new confirmation request in Redis.
         
         Args:
             user_id: User ID
@@ -56,16 +64,29 @@ class ConfirmationService:
         # Generate unique confirmation ID
         confirmation_id = f"conf_{user_id}_{int(datetime.now().timestamp())}"
         
-        # Store pending confirmation
-        self.pending_confirmations[confirmation_id] = {
+        # Prepare confirmation data
+        confirmation_data = {
             "user_id": user_id,
             "transaction_data": transaction_data,
             "ai_suggestion": ai_suggestion,
-            "created_at": datetime.now(),
-            "expires_at": datetime.now() + timedelta(hours=24)
+            "created_at": datetime.now().isoformat(),
+            "expires_at": (datetime.now() + timedelta(hours=24)).isoformat()
         }
         
-        logger.info(f"📝 Created confirmation request: {confirmation_id}")
+        # Store in Redis with TTL
+        redis_key = f"{self.CONFIRMATION_PREFIX}{confirmation_id}"
+        await self.redis.setex(
+            redis_key,
+            self.CONFIRMATION_TTL,
+            json.dumps(confirmation_data)
+        )
+        
+        # Add to user's pending set
+        user_pending_key = f"{self.USER_PENDING_PREFIX}{user_id}"
+        await self.redis.sadd(user_pending_key, confirmation_id)
+        await self.redis.expire(user_pending_key, self.CONFIRMATION_TTL)
+        
+        logger.info(f"📝 Created confirmation request in Redis: {confirmation_id}")
         return confirmation_id
     
     async def get_confirmation_message(
@@ -81,15 +102,25 @@ class ConfirmationService:
         Returns:
             Message data with text and buttons
         """
-        confirmation = self.pending_confirmations.get(confirmation_id)
-        if not confirmation:
-            logger.warning(f"Confirmation not found: {confirmation_id}")
+        # Get confirmation from Redis
+        redis_key = f"{self.CONFIRMATION_PREFIX}{confirmation_id}"
+        confirmation_json = await self.redis.get(redis_key)
+        
+        if not confirmation_json:
+            logger.warning(f"Confirmation not found in Redis: {confirmation_id}")
+            return None
+        
+        try:
+            confirmation = json.loads(confirmation_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse confirmation JSON: {e}")
             return None
         
         # Check if expired
-        if datetime.now() > confirmation["expires_at"]:
+        expires_at = datetime.fromisoformat(confirmation["expires_at"])
+        if datetime.now() > expires_at:
             logger.warning(f"Confirmation expired: {confirmation_id}")
-            del self.pending_confirmations[confirmation_id]
+            await self.redis.delete(redis_key)
             return None
         
         tx = confirmation["transaction_data"]
@@ -137,9 +168,18 @@ class ConfirmationService:
         Returns:
             True if successful, False otherwise
         """
-        confirmation = self.pending_confirmations.get(confirmation_id)
-        if not confirmation:
-            logger.warning(f"Confirmation not found: {confirmation_id}")
+        # Get confirmation from Redis
+        redis_key = f"{self.CONFIRMATION_PREFIX}{confirmation_id}"
+        confirmation_json = await self.redis.get(redis_key)
+        
+        if not confirmation_json:
+            logger.warning(f"Confirmation not found in Redis: {confirmation_id}")
+            return False
+        
+        try:
+            confirmation = json.loads(confirmation_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse confirmation JSON: {e}")
             return False
         
         # Verify user owns this confirmation
@@ -173,8 +213,14 @@ class ConfirmationService:
                 ai_category=suggestion.get("category")
             )
         
-        # Remove from pending
-        del self.pending_confirmations[confirmation_id]
+        # Remove from Redis
+        await self.redis.delete(redis_key)
+        
+        # Remove from user's pending set
+        user_pending_key = f"{self.USER_PENDING_PREFIX}{user_id}"
+        await self.redis.srem(user_pending_key, confirmation_id)
+        
+        logger.info(f"🗑️ Removed confirmation from Redis: {confirmation_id}")
         
         return True
     
@@ -226,7 +272,7 @@ class ConfirmationService:
     
     async def get_pending_count(self, user_id: str) -> int:
         """
-        Get count of pending confirmations for a user.
+        Get count of pending confirmations for a user from Redis.
         
         Args:
             user_id: User ID
@@ -234,23 +280,35 @@ class ConfirmationService:
         Returns:
             Count of pending confirmations
         """
-        count = sum(
-            1 for conf in self.pending_confirmations.values()
-            if conf["user_id"] == user_id and datetime.now() <= conf["expires_at"]
-        )
+        user_pending_key = f"{self.USER_PENDING_PREFIX}{user_id}"
+        count = await self.redis.scard(user_pending_key)
         return count
     
     async def cleanup_expired(self):
-        """Remove expired confirmation requests"""
-        now = datetime.now()
-        expired = [
-            conf_id for conf_id, conf in self.pending_confirmations.items()
-            if now > conf["expires_at"]
-        ]
+        """
+        Remove expired confirmation requests from Redis.
+        Note: Redis TTL handles most cleanup automatically.
+        This method is for manual cleanup if needed.
+        """
+        # Get all confirmation keys
+        pattern = f"{self.CONFIRMATION_PREFIX}*"
+        cursor = 0
+        expired_count = 0
         
-        for conf_id in expired:
-            del self.pending_confirmations[conf_id]
-            logger.debug(f"🗑️ Removed expired confirmation: {conf_id}")
+        while True:
+            cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
+            
+            for key in keys:
+                # Check TTL
+                ttl = await self.redis.ttl(key)
+                if ttl == -2:  # Key doesn't exist
+                    expired_count += 1
+                elif ttl == -1:  # Key has no expiry (shouldn't happen)
+                    await self.redis.expire(key, self.CONFIRMATION_TTL)
+                    logger.warning(f"Fixed missing TTL for key: {key}")
+            
+            if cursor == 0:
+                break
         
-        if expired:
-            logger.info(f"🗑️ Cleaned up {len(expired)} expired confirmations")
+        if expired_count > 0:
+            logger.info(f"🗑️ Cleaned up {expired_count} expired confirmations from Redis")

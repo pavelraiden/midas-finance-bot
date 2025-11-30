@@ -1,0 +1,47 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'midas-finance-bot'
+
+scrape_configs:
+  # Midas Finance Bot metrics
+  - job_name: 'midas-bot'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+        labels:
+          service: 'bot'
+          environment: 'production'
+    
+  # Midas AI Worker metrics
+  - job_name: 'midas-worker'
+    static_configs:
+      - targets: ['host.docker.internal:8001']
+        labels:
+          service: 'worker'
+          environment: 'production'
+    
+  # Redis metrics (if redis_exporter is used)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+          environment: 'production'
+    
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+# Alerting rules
+rule_files:
+  - 'alerts.yml'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
