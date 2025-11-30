@@ -22,7 +22,11 @@ from infrastructure.repositories.wallet_repository import WalletRepository
 from infrastructure.repositories.category_repository import CategoryRepository
 from infrastructure.repositories.transaction_repository import TransactionRepository
 from infrastructure.repositories.merchant_repository import MerchantRepository
+from infrastructure.repositories.balance_snapshot_repository import BalanceSnapshotRepository
+from infrastructure.repositories.audit_repository import AuditRepository
 from infrastructure.database import Database
+from infrastructure.unit_of_work import UnitOfWorkFactory
+from infrastructure.security import get_encryption_service, get_audit_logger
 
 # Services
 from app.services.user_service import UserService
@@ -31,10 +35,12 @@ from app.services.transaction_service import TransactionService
 from app.services.blockchain_service import BlockchainService
 from app.services.deepseek_service import DeepSeekService
 from app.services.sync_service import SyncService
+from app.services.balance_detection.balance_monitor import BalanceMonitor
+from app.services.balance_detection.pattern_detector import PatternDetector
 from app.scheduler.wallet_sync_scheduler import WalletSyncScheduler
 
 # Handlers
-from app.bot.handlers import start, transaction, wallet_management, categories, labels, analytics, ai_finance, sync_command
+from app.bot.handlers import start, transaction, wallet_management, categories, labels, analytics, ai_finance, sync_command, pending_transactions
 
 # Setup logging
 setup_logging()
@@ -85,6 +91,16 @@ async def main():
     category_repo = CategoryRepository(db_path)
     transaction_repo = TransactionRepository(db_path)
     merchant_repo = MerchantRepository(db)
+    balance_snapshot_repo = BalanceSnapshotRepository(db_path)
+    audit_repo = AuditRepository(db_path)
+    
+    # Initialize security services
+    logger.info("Initializing security services...")
+    encryption_service = get_encryption_service()
+    audit_logger = get_audit_logger(audit_repo)
+    
+    # Initialize UnitOfWork factory
+    uow_factory = UnitOfWorkFactory(db_path)
     
     # Initialize services
     logger.info("Initializing services...")
@@ -99,6 +115,16 @@ async def main():
         merchant_repo=merchant_repo,
         transaction_service=transaction_service,
         wallet_service=wallet_service
+    )
+    
+    # Initialize Balance Detection services
+    logger.info("Initializing Balance Detection services...")
+    pattern_detector = PatternDetector()
+    balance_monitor = BalanceMonitor(
+        balance_snapshot_repo=balance_snapshot_repo,
+        pattern_detector=pattern_detector,
+        blockchain_service=blockchain_service,
+        transaction_service=transaction_service
     )
     
     # Initialize scheduler
@@ -125,6 +151,7 @@ async def main():
     dp.include_router(analytics.router)
     dp.include_router(ai_finance.router)
     dp.include_router(sync_command.router)
+    dp.include_router(pending_transactions.router)
     logger.info("All handlers registered")
     
     # Dependency injection middleware
@@ -141,6 +168,10 @@ async def main():
         data["deepseek_service"] = deepseek_service
         data["sync_service"] = sync_service
         data["scheduler"] = scheduler
+        data["balance_monitor"] = balance_monitor
+        data["encryption_service"] = encryption_service
+        data["audit_logger"] = audit_logger
+        data["uow_factory"] = uow_factory
         return await handler(event, data)
     
     # Setup bot commands

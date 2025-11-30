@@ -216,15 +216,30 @@ class SyncService:
     
     async def _add_to_uncategorized_queue(
         self,
-        user_id: str,
-        wallet_id: str,
         tx: Dict,
         suggested_category_id: Optional[str],
         confidence: int
     ):
         """Add transaction to uncategorized queue for user review"""
-        # TODO: Implement uncategorized queue
-        logger.info(f"Added to uncategorized queue: {tx['hash']}")
+        logger.info(f"Adding to uncategorized queue: {tx['hash']} (confidence: {confidence}%)")
+        
+        # Create transaction with 'uncategorized' status
+        transaction_data = {
+            'hash': tx['hash'],
+            'amount': float(tx['value']),
+            'currency': tx['currency'],
+            'date': tx['block_timestamp'],
+            'type': tx['type'],
+            'wallet_id': tx['wallet_id'],
+            'category_id': suggested_category_id,  # Suggested category
+            'status': 'uncategorized',  # Mark as needing review
+            'confidence': confidence,
+            'note': f"Auto-detected transaction (confidence: {confidence}%). Please review and confirm category."
+        }
+        
+        # Save to database with uncategorized status
+        await self.transaction_service.create_transaction(transaction_data)
+        logger.info(f"Transaction {tx['hash']} added to uncategorized queue")
     
     async def sync_all_user_wallets(self, user_id: str) -> Dict:
         """Sync all wallets for a user"""
