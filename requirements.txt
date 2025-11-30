@@ -27,6 +27,7 @@ apscheduler==3.10.4
 
 # Redis (for rate limiting)
 redis>=5.0.0
+async-timeout>=4.0.3
 
 # Testing
 pytest==8.3.4
