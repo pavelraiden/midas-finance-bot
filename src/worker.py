@@ -16,6 +16,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from infrastructure.logging_config import setup_logging, get_logger
 from app.services.ai_task_queue import AITaskQueue, TaskStatus
 from app.services.deepseek_service import DeepSeekService
+from app.services.prompt_library import PromptLibrary
+from app.services.context_manager import ContextManager
+from infrastructure.repositories.user_repository import UserRepository
+from infrastructure.repositories.transaction_repository import TransactionRepository
+from infrastructure.repositories.category_repository import CategoryRepository
+from infrastructure.repositories.merchant_repository import MerchantRepository
+from infrastructure.database import Database
 
 # Setup logging
 setup_logging()
@@ -33,23 +40,45 @@ class DeepSeekWorker:
     - Graceful shutdown
     """
     
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: Optional[str] = None, db_path: Optional[str] = None):
         """
         Initialize DeepSeek Worker.
         
         Args:
             redis_url: Redis connection URL (defaults to env var or localhost)
+            db_path: Database path (defaults to env var or ./data/midas.db)
         """
         if redis_url is None:
             redis_host = os.getenv("REDIS_HOST", "localhost")
             redis_port = os.getenv("REDIS_PORT", "6379")
             redis_url = f"redis://{redis_host}:{redis_port}"
         
+        if db_path is None:
+            db_path = os.getenv("DB_PATH", "./data/midas.db")
+        
+        # Initialize services
         self.task_queue = AITaskQueue(redis_url)
         self.deepseek_service = DeepSeekService()
+        self.prompt_library = PromptLibrary()
+        
+        # Initialize database and repositories
+        self.database = Database(db_path)
+        self.user_repo = UserRepository(db_path)
+        self.transaction_repo = TransactionRepository(db_path)
+        self.category_repo = CategoryRepository(db_path)
+        self.merchant_repo = MerchantRepository(db_path)
+        
+        # Initialize context manager
+        self.context_manager = ContextManager(
+            user_repo=self.user_repo,
+            transaction_repo=self.transaction_repo,
+            category_repo=self.category_repo,
+            merchant_repo=self.merchant_repo
+        )
+        
         self.running = False
         
-        logger.info(f"🤖 DeepSeekWorker initialized (Redis: {redis_url})")
+        logger.info(f"🤖 DeepSeekWorker initialized (Redis: {redis_url}, DB: {db_path})")
     
     async def process_task(self, task_data: Dict[str, Any]) -> Optional[Any]:
         """
@@ -90,38 +119,38 @@ class DeepSeekWorker:
     
     async def _categorize_transaction(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Categorize a transaction using DeepSeek AI.
+        Categorize a transaction using DeepSeek AI with context.
         
         Args:
-            data: Transaction data
+            data: Transaction data (must include user_id)
         
         Returns:
             Category and confidence
         """
-        # Extract transaction details
-        amount = data.get("amount")
-        description = data.get("description", "")
-        merchant = data.get("merchant", "")
+        user_id = data.get("user_id")
+        if not user_id:
+            logger.error("Missing user_id in transaction data")
+            return {
+                "category": "Other",
+                "confidence": 0.0,
+                "reasoning": "Missing user_id"
+            }
         
-        # Build prompt
-        prompt = f"""
-Categorize this transaction:
-Amount: {amount}
-Description: {description}
-Merchant: {merchant}
-
-Return JSON with:
-- category: One of [Food, Transport, Shopping, Entertainment, Bills, Health, Other]
-- confidence: Float between 0 and 1
-- reasoning: Brief explanation
-"""
+        # 1. Get context from ContextManager
+        context = await self.context_manager.get_categorization_context(
+            user_id=user_id,
+            transaction_data=data
+        )
         
-        # Call DeepSeek (sync, will be run in executor)
+        # 2. Get prompt from PromptLibrary
+        prompt_messages = self.prompt_library.get_categorization_prompt(context)
+        
+        # 3. Call DeepSeek (sync, will be run in executor)
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
             self.deepseek_service._make_request,
-            [{"role": "user", "content": prompt}]
+            prompt_messages
         )
         
         if not response:
@@ -131,13 +160,28 @@ Return JSON with:
                 "reasoning": "AI service unavailable"
             }
         
-        # Parse response (simplified - in production use proper JSON parsing)
+        # 4. Parse response
         try:
             import json
             result = json.loads(response)
+            
+            # 5. Handle merchant mapping if suggested
+            if "new_merchant_mapping" in result and result["new_merchant_mapping"]:
+                mapping = result["new_merchant_mapping"]
+                try:
+                    await self.merchant_repo.create({
+                        "user_id": user_id,
+                        "merchant_name": mapping.get("merchant_name"),
+                        "category": mapping.get("suggested_category")
+                    })
+                    logger.info(f"✅ Saved new merchant mapping: {mapping.get('merchant_name')} → {mapping.get('suggested_category')}")
+                except Exception as e:
+                    logger.error(f"Failed to save merchant mapping: {e}")
+            
             return result
-        except:
+        except json.JSONDecodeError:
             # Fallback if response is not JSON
+            logger.warning(f"Non-JSON response from AI: {response[:100]}")
             return {
                 "category": "Other",
                 "confidence": 0.5,
@@ -146,34 +190,34 @@ Return JSON with:
     
     async def _analyze_spending(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze spending patterns.
+        Analyze spending patterns with context.
         
         Args:
-            data: User spending data
+            data: User spending data (must include user_id)
         
         Returns:
             Analysis results
         """
         user_id = data.get("user_id")
-        transactions = data.get("transactions", [])
+        if not user_id:
+            return {"error": "Missing user_id"}
         
-        prompt = f"""
-Analyze spending for user {user_id}:
-Total transactions: {len(transactions)}
-
-Provide insights on:
-1. Top spending categories
-2. Unusual patterns
-3. Savings opportunities
-
-Return structured analysis.
-"""
+        # 1. Get context from ContextManager
+        days = data.get("days", 30)
+        context = await self.context_manager.get_analyze_spending_context(
+            user_id=user_id,
+            days=days
+        )
         
+        # 2. Get prompt from PromptLibrary
+        prompt_messages = self.prompt_library.get_analyze_spending_prompt(context)
+        
+        # 3. Call DeepSeek
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
             self.deepseek_service._make_request,
-            [{"role": "user", "content": prompt}]
+            prompt_messages
         )
         
         return {
@@ -183,19 +227,46 @@ Return structured analysis.
     
     async def _budget_recommendation(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate budget recommendations.
+        Generate budget recommendations with context.
         
         Args:
-            data: User financial data
+            data: User financial data (must include user_id)
         
         Returns:
             Budget recommendations
         """
-        # Placeholder - implement full logic later
-        return {
-            "recommendations": "Budget recommendations coming soon",
-            "categories": {}
-        }
+        user_id = data.get("user_id")
+        if not user_id:
+            return {"error": "Missing user_id"}
+        
+        # 1. Get context from ContextManager
+        months = data.get("months", 3)
+        context = await self.context_manager.get_budget_recommendation_context(
+            user_id=user_id,
+            months=months
+        )
+        
+        # 2. Get prompt from PromptLibrary
+        prompt_messages = self.prompt_library.get_budget_recommendation_prompt(context)
+        
+        # 3. Call DeepSeek
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            self.deepseek_service._make_request,
+            prompt_messages
+        )
+        
+        # 4. Parse response
+        try:
+            import json
+            result = json.loads(response)
+            return result
+        except json.JSONDecodeError:
+            return {
+                "recommendations": response or "Recommendations unavailable",
+                "categories": {}
+            }
     
     async def _find_anomalies(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
