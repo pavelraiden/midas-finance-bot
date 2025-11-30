@@ -16,6 +16,34 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - midas-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: midas-worker
+    restart: unless-stopped
+    command: python3.11 -m src.worker
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WORKER_MODE=1
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - midas-network
     healthcheck:

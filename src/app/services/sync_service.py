@@ -7,6 +7,7 @@ from decimal import Decimal
 from infrastructure.logging_config import get_logger
 from app.services.blockchain_service import BlockchainService
 from app.services.deepseek_service import DeepSeekService
+from app.services.ai_task_queue import AITaskQueue, TaskStatus
 from infrastructure.repositories.merchant_repository import MerchantRepository
 
 logger = get_logger(__name__)
@@ -21,13 +22,16 @@ class SyncService:
         deepseek_service: DeepSeekService,
         merchant_repo: MerchantRepository,
         transaction_service,
-        wallet_service
+        wallet_service,
+        ai_task_queue: Optional[AITaskQueue] = None
     ):
         self.blockchain = blockchain_service
         self.ai = deepseek_service
         self.merchant_repo = merchant_repo
         self.transaction_service = transaction_service
         self.wallet_service = wallet_service
+        self.ai_task_queue = ai_task_queue
+        self.use_async_ai = ai_task_queue is not None
     
     async def sync_wallet(
         self,
@@ -160,12 +164,37 @@ class SyncService:
             return best_match['category_id'], 85  # Lower confidence for similar match
         
         # 3. Use AI to categorize
-        ai_result = self.ai.categorize_transaction(
-            user_id=user_id,
-            merchant_name=merchant_name,
-            amount=amount,
-            description=description
-        )
+        if self.use_async_ai:
+            # Async AI via Redis queue
+            task_id = await self.ai_task_queue.enqueue_task(
+                task_type="categorize_transaction",
+                data={
+                    "user_id": user_id,
+                    "merchant_name": merchant_name,
+                    "amount": amount,
+                    "description": description
+                },
+                priority=1,
+                user_id=user_id
+            )
+            
+            # Get result (with timeout)
+            result_data = await self.ai_task_queue.get_result(task_id, timeout=30)
+            
+            if result_data and result_data.get("status") == TaskStatus.COMPLETED:
+                ai_result = result_data.get("result", {})
+            else:
+                # Timeout or failure - use default
+                logger.warning(f"AI task timeout/failed: {task_id}")
+                ai_result = {"category": "Uncategorized", "confidence": 0}
+        else:
+            # Sync AI (old way)
+            ai_result = self.ai.categorize_transaction(
+                user_id=user_id,
+                merchant_name=merchant_name,
+                amount=amount,
+                description=description
+            )
         
         category_name = ai_result.get('category', 'Uncategorized')
         confidence = ai_result.get('confidence', 0)
