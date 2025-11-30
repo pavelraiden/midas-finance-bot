@@ -197,6 +197,10 @@ For support, email support@example.com or open an issue on GitHub.
 
 ## 🗺️ Roadmap
 
+- [x] **Balance-based Detection**
+- [x] **Production-Ready Security**
+- [x] **Unit of Work Pattern**
+- [x] **Comprehensive Error Handling**
 - [ ] Multi-language support (English, Ukrainian, Russian)
 - [ ] Export to CSV/Excel
 - [ ] Budget planning and alerts
@@ -208,7 +212,7 @@ For support, email support@example.com or open an issue on GitHub.
 
 ## 📊 Status
 
-**Version**: 1.0.0  
+**Version**: 2.0.0  
 **Status**: Active Development  
 **Last Updated**: November 2025
 

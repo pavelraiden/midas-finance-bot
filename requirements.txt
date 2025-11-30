@@ -15,5 +15,13 @@ apscheduler==3.11.1
 # Utilities
 python-dateutil==2.9.0.post0
 
+# Security & Encryption
+cryptography==42.0.5
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.5
+pytest-cov==4.1.0
+
 # Optional: Supabase support
 # supabase==2.10.0
