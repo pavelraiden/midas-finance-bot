@@ -10,7 +10,9 @@ logger = get_logger(__name__)
 class BaseRepository:
     """Base repository with SQLite connection"""
     
-    def __init__(self, db_path: str = "/home/ubuntu/spendee_bot/spendee_bot.db"):
+    def __init__(self, db_path: str):
+        if not db_path:
+            raise ValueError("Database path cannot be empty.")
         self.db_path = db_path
         self._init_db()
     
