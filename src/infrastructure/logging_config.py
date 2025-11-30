@@ -11,7 +11,7 @@ def setup_logging():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler('/home/ubuntu/spendee_bot/bot.log')
+            logging.FileHandler('bot.log')
         ]
     )
 

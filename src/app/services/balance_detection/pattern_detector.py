@@ -12,8 +12,8 @@ from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from ....domain.balance.balance_snapshot import BalanceDelta
-from ....infrastructure.repositories.transaction_repository import TransactionRepository
+from src.domain.balance.balance_snapshot import BalanceDelta
+from src.infrastructure.repositories.transaction_repository import TransactionRepository
 
 logger = logging.getLogger(__name__)
 

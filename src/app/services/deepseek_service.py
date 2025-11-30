@@ -19,7 +19,8 @@ class DeepSeekService:
         self.base_url = "https://api.deepseek.com/v1"
         
         if not self.api_key:
-            logger.warning("DEEPSEEK_API_KEY not set - AI features will not work")
+            logger.error("DEEPSEEK_API_KEY not set - AI features disabled")
+            logger.error("Please set DEEPSEEK_API_KEY environment variable to enable AI features")
         
         # Persistent chat history per user
         self.chat_histories = {}
@@ -44,7 +45,7 @@ class DeepSeekService:
         }
         
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]

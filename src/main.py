@@ -73,6 +73,16 @@ async def main():
     """Main bot function."""
     logger.info("Starting Midas Financial Bot...")
     
+    # Check for single instance
+    from infrastructure.pid_manager import ensure_single_instance
+    if not ensure_single_instance():
+        logger.error("Another bot instance is already running. Exiting.")
+        sys.exit(1)
+    
+    # Validate encryption key
+    from infrastructure.security.encryption_key_validator import ensure_encryption_key_configured
+    ensure_encryption_key_configured()
+    
     # Initialize infrastructure
     logger.info("Initializing infrastructure...")
     
@@ -81,8 +91,19 @@ async def main():
     
     # Initialize database
     logger.info("Initializing database...")
-    db_path = "/home/ubuntu/spendee_bot/data/bot.db"
+    from pathlib import Path
+    PROJECT_ROOT = Path(__file__).parent.parent
+    DATA_DIR = PROJECT_ROOT / "data"
+    DATA_DIR.mkdir(exist_ok=True)
+    db_path = str(DATA_DIR / "bot.db")
     db = Database(db_path)
+    
+    # Run database migrations
+    logger.info("Running database migrations...")
+    from infrastructure.database_migrations import run_database_migrations
+    if not run_database_migrations(db_path):
+        logger.error("Database migrations failed. Exiting.")
+        sys.exit(1)
     
     # Initialize repositories
     logger.info("Initializing repositories...")
@@ -97,7 +118,7 @@ async def main():
     # Initialize security services
     logger.info("Initializing security services...")
     encryption_service = get_encryption_service()
-    audit_logger = get_audit_logger(audit_repo)
+    audit_logger = get_audit_logger()
     
     # Initialize UnitOfWork factory
     uow_factory = UnitOfWorkFactory(db_path)
@@ -119,12 +140,11 @@ async def main():
     
     # Initialize Balance Detection services
     logger.info("Initializing Balance Detection services...")
-    pattern_detector = PatternDetector()
+    pattern_detector = PatternDetector(transaction_repo=transaction_repo)
     balance_monitor = BalanceMonitor(
-        balance_snapshot_repo=balance_snapshot_repo,
-        pattern_detector=pattern_detector,
-        blockchain_service=blockchain_service,
-        transaction_service=transaction_service
+        balance_repo=balance_snapshot_repo,
+        wallet_repo=wallet_repo,
+        blockchain_service=blockchain_service
     )
     
     # Initialize scheduler

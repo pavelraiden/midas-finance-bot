@@ -13,6 +13,12 @@ from .encryption_service import (
     DecryptionError,
 )
 
+from .audit_logger import (
+    AuditLogger,
+    get_audit_logger,
+    AuditAction,
+)
+
 __all__ = [
     "EncryptionService",
     "get_encryption_service",
@@ -20,4 +26,7 @@ __all__ = [
     "decrypt_credential",
     "EncryptionError",
     "DecryptionError",
+    "AuditLogger",
+    "get_audit_logger",
+    "AuditAction",
 ]
