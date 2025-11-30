@@ -8,6 +8,7 @@ from infrastructure.logging_config import get_logger
 from app.services.blockchain_service import BlockchainService
 from app.services.deepseek_service import DeepSeekService
 from app.services.ai_task_queue import AITaskQueue, TaskStatus
+from app.services.crypto_card_detector import CryptoCardDetector
 from infrastructure.repositories.merchant_repository import MerchantRepository
 
 logger = get_logger(__name__)
@@ -23,6 +24,7 @@ class SyncService:
         merchant_repo: MerchantRepository,
         transaction_service,
         wallet_service,
+        crypto_card_detector: Optional[CryptoCardDetector] = None,
         ai_task_queue: Optional[AITaskQueue] = None
     ):
         self.blockchain = blockchain_service
@@ -30,6 +32,7 @@ class SyncService:
         self.merchant_repo = merchant_repo
         self.transaction_service = transaction_service
         self.wallet_service = wallet_service
+        self.crypto_card_detector = crypto_card_detector
         self.ai_task_queue = ai_task_queue
         self.use_async_ai = ai_task_queue is not None
     
@@ -60,8 +63,33 @@ class SyncService:
         
         logger.info(f"Found {len(transactions)} new transactions")
         
-        # Process each transaction
-        categorized_count = 0
+        # 1. Detect crypto card top-ups (USDT→USDC swaps)
+        if self.crypto_card_detector:
+            card_topups = await self.crypto_card_detector.find_usdt_usdc_swaps(
+                user_id=user_id,
+                new_transactions=transactions
+            )
+            
+            if card_topups:
+                logger.info(f"Detected {len(card_topups)} crypto card top-ups")
+                
+                # Save new top-up transactions
+                for topup in card_topups:
+                    await self.transaction_service.create(topup)
+                
+                # Mark original USDT/USDC transactions as internal transfers
+                tx_ids_to_hide = []
+                for topup in card_topups:
+                    tx_ids_to_hide.append(topup["metadata"]["usdt_tx_id"])
+                    tx_ids_to_hide.append(topup["metadata"]["usdc_tx_id"])
+                
+                await self.crypto_card_detector.mark_as_internal_transfer(tx_ids_to_hide)
+                
+                categorized_count = len(card_topups)
+        else:
+            categorized_count = 0
+        
+        # 2. Process each transaction
         uncategorized_count = 0
         
         for tx in transactions:
