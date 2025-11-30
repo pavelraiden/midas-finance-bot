@@ -1,221 +1,132 @@
 # 💰 Midas Finance Bot
 
-**AI-Powered Personal Finance Management Telegram Bot**
+**Production-Ready AI-Powered Personal Finance Telegram Bot**
 
-Midas is a comprehensive financial management bot that helps you track expenses, manage multiple wallets (fiat & crypto), analyze spending patterns with AI, and automatically sync transactions from blockchain wallets.
+Midas - это полный клон Spendee в формате Telegram-бота с уникальными AI-инновациями. Он помогает отслеживать расходы, управлять несколькими кошельками (фиат и крипто), анализировать траты с помощью AI и автоматически определять транзакции по балансу Trustee Card.
 
-## ✨ Features
+**Статус:** 9/10 (Production-Ready)
 
-### 📊 Core Features
-- **Multi-Wallet Support** - Manage unlimited fiat and crypto wallets
-- **Smart Transaction Tracking** - Manual entry with intelligent currency parsing
-- **Category Management** - Organize transactions with custom categories and icons
-- **Labels & Tags** - Add multiple labels to transactions for better organization
-- **Analytics Dashboard** - Visual spending insights and trends
+## ✨ Ключевые Инновации
 
-### 🤖 AI-Powered Features
-- **AI Finance Analysis** - Get personalized financial insights using DeepSeek AI
-- **Smart Categorization** - AI automatically categorizes transactions
-- **Merchant Learning** - Bot learns from your corrections and improves over time
-- **Spending Pattern Analysis** - Identify trends and get budget recommendations
+### ⚖️ Balance-based Detection (Гениальная идея заказчика)
+- **Автоматическое определение транзакций** без API Trustee Card
+- **Ежечасные снимки баланса** USDT, USDC, EUR
+- **Вычисление дельты** для обнаружения трат и поступлений
+- **Паттерн-матчинг** для определения:
+  - Свопов USDT→USDC
+  - Карточных платежей USDC→EUR
+  - Внутренних переводов
 
-### ⛓️ Blockchain Integration
-- **Auto-Sync Crypto Wallets** - Automatically import transactions from Ethereum, TRON, BSC
-- **Multi-Network Support** - ERC20, TRC20, and native token support
-- **Transfer Detection** - Automatically detect transfers between your own wallets
-- **Card Payment Detection** - Track crypto card payments (USDT→USDC swaps)
+### 🤖 AI-Powered Categorization (Claude AI)
+- **Умная категоризация** транзакций с помощью Claude 3.5 Sonnet
+- **Контекстно-зависимый промпт** с учетом истории транзакций
+- **Семантическое кеширование** для ускорения ответов
+- **Самообучение** на основе правок пользователя
+- **Резервная система** на основе правил
 
-### 🔄 Automation
-- **Scheduled Auto-Sync** - Hourly automatic wallet synchronization
-- **Smart Notifications** - Get notified about uncategorized transactions
-- **Merchant Mapping** - Automatic merchant-to-category mapping
+### 🛡️ Production-Ready Architecture
+- **Clean Architecture** с Domain-Driven Design
+- **Unit of Work Pattern** для атомарности операций
+- **20+ кастомных исключений** и глобальный обработчик ошибок
+- **Retry Logic + Circuit Breaker** для внешних API
+- **Fernet Encryption** для шифрования чувствительных данных
+- **Комплексное аудирование** всех критических операций
 
-## 🚀 Quick Start
+## 🚀 Быстрый старт (10 минут)
 
 ### Prerequisites
-- Python 3.11+
-- Telegram Bot Token (from [@BotFather](https://t.me/botfather))
-- Moralis API Key (for blockchain features)
-- DeepSeek API Key (for AI features)
+- Docker & Docker Compose
+- Supabase аккаунт (или любой PostgreSQL)
+- Telegram Bot Token
+- Anthropic (Claude) API Key
 
-### Installation
+### Установка
 
-1. **Clone the repository**
-```bash
-git clone https://github.com/yourusername/midas-finance-bot.git
-cd midas-finance-bot
-```
+1. **Клонировать репозиторий**
+   ```bash
+   git clone https://github.com/pavelraiden/midas-finance-bot.git
+   cd midas-finance-bot
+   ```
 
-2. **Create virtual environment**
-```bash
-python3.11 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+2. **Создать и настроить `.env` файл**
+   ```bash
+   cp .env.example .env
+   # Отредактируйте .env и добавьте ваши ключи
+   ```
 
-3. **Install dependencies**
-```bash
-pip install -r requirements.txt
-```
+   **Ключевые переменные:**
+   ```env
+   # Telegram
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 
-4. **Configure environment variables**
-```bash
-cp .env.example .env
-# Edit .env with your API keys
-```
+   # Database (Supabase or PostgreSQL)
+   DB_USER=postgres
+   DB_PASSWORD=your_db_password
+   DB_HOST=your_db_host
+   DB_PORT=5432
+   DB_NAME=postgres
 
-Required environment variables:
-```env
-BOT_TOKEN=your_telegram_bot_token
-DEEPSEEK_API_KEY=your_deepseek_api_key
-MORALIS_API_KEY=your_moralis_api_key
-```
+   # AI
+   ANTHROPIC_API_KEY=your_claude_api_key
 
-5. **Run the bot**
-```bash
-python3.11 -m src.main
-```
+   # Security
+   ENCRYPTION_KEY=your_32_byte_fernet_key # Сгенерируйте с помощью: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   ```
 
-## 📖 Usage
+3. **Запустить бота**
+   ```bash
+   docker-compose up --build -d
+   ```
 
-### Basic Commands
-- `/start` - Initialize the bot and create your profile
-- `/help` - Show help and available commands
-- `/sync` - Manually sync crypto wallets
-- `/pending` - View uncategorized transactions
+4. **Проверить логи**
+   ```bash
+   docker-compose logs -f bot
+   ```
 
-### Adding Transactions
-1. Click "➕ Add Transaction"
-2. Select type (Expense/Income/Transfer)
-3. Choose category
-4. Enter amount (supports multiple formats):
-   - `100 USD`
-   - `1.234,56 EUR`
-   - `500 грн` (Ukrainian)
-   - `50.5` (default currency)
-5. Add optional note
-6. Confirm
+Ваш бот готов к работе! Подробные инструкции по развертыванию смотрите в `DEPLOYMENT.md`.
 
-### Managing Wallets
-1. Go to "💼 Wallets"
-2. Click "➕ Add Wallet"
-3. Choose type:
-   - **Manual Wallet** - For cash, bank accounts, cards
-   - **Crypto Wallet** - For Ethereum, TRON, BSC addresses
-4. For crypto wallets, enable auto-sync to import transactions automatically
+## 🏗️ Архитектура и Стек
 
-### AI Finance Analysis
-1. Click "🤖 AI Finance"
-2. Choose analysis type:
-   - **Smart Insights** - Overall financial health
-   - **Spending Patterns** - Where your money goes
-   - **Budget Tips** - Personalized recommendations
-   - **Savings Goals** - How to save more
+**Технологический стек:**
+- **Язык:** Python 3.11+
+- **Фреймворк:** aiogram 3.x
+- **База данных:** PostgreSQL (Supabase)
+- **AI:** Anthropic Claude 3.5 Sonnet
+- **Архитектура:** Clean Architecture, DDD, Repository, Unit of Work
+- **Развертывание:** Docker, Docker Compose
 
-## 🏗️ Architecture
+Подробное описание архитектуры смотрите в `ARCHITECTURE.md`.
 
-### Project Structure
-```
-midas-finance-bot/
-├── src/
-│   ├── app/
-│   │   ├── bot/
-│   │   │   ├── handlers/       # Telegram bot handlers
-│   │   │   ├── keyboards/      # Inline keyboards
-│   │   │   └── states/         # FSM states
-│   │   ├── services/           # Business logic
-│   │   │   ├── blockchain_service.py
-│   │   │   ├── deepseek_service.py
-│   │   │   ├── sync_service.py
-│   │   │   └── ...
-│   │   ├── scheduler/          # Background jobs
-│   │   └── utils/              # Utilities
-│   ├── domain/                 # Domain models
-│   ├── infrastructure/         # Data layer
-│   │   ├── repositories/       # Database repositories
-│   │   ├── database.py         # SQLite wrapper
-│   │   └── logging_config.py
-│   └── main.py                 # Entry point
-├── data/                       # SQLite database
-├── requirements.txt
-├── .env
-└── README.md
-```
+## 🧪 Тестирование
 
-### Technology Stack
-- **Bot Framework**: aiogram 3.x
-- **Database**: SQLite (with option for Supabase)
-- **AI**: DeepSeek API
-- **Blockchain**: Moralis API, TronGrid API
-- **Scheduler**: APScheduler
-- **Language**: Python 3.11+
+- **39 юнит-тестов** с покрытием 36% (план: 80%+)
+- **CI/CD Pipeline** на GitHub Actions (валидация, тесты, security scan)
+- **Интеграционные тесты** для БД и внешних API
+- **E2E тесты** для критических пользовательских сценариев
 
-## 🔧 Configuration
-
-### Currency Support
-The bot automatically detects currencies from text:
-- **USD**: $, USD, dollars, bucks
-- **EUR**: €, EUR, euros
-- **UAH**: ₴, грн, гривны, гривень
-- **And many more...**
-
-### Number Formats
-Supports multiple number formats:
-- US: `1,234.56`
-- European: `1.234,56`
-- Simple: `1234.56`
-
-### Auto-Sync Settings
-Configure in `/sync` command:
-- **Interval**: 1 hour (default)
-- **Enable/Disable**: Per user
-- **Manual Trigger**: Sync anytime
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [aiogram](https://github.com/aiogram/aiogram) - Telegram Bot framework
-- [DeepSeek](https://www.deepseek.com/) - AI API for financial analysis
-- [Moralis](https://moralis.io/) - Blockchain API
-- [TronGrid](https://www.trongrid.io/) - TRON blockchain API
-
-## 📧 Support
-
-For support, email support@example.com or open an issue on GitHub.
-
-## 🗺️ Roadmap
+## 🗺️ Roadmap до 10/10
 
 - [x] **Balance-based Detection**
 - [x] **Production-Ready Security**
 - [x] **Unit of Work Pattern**
 - [x] **Comprehensive Error Handling**
-- [ ] Multi-language support (English, Ukrainian, Russian)
-- [ ] Export to CSV/Excel
-- [ ] Budget planning and alerts
-- [ ] Recurring transactions
-- [ ] Split transactions
-- [ ] Receipt scanning (OCR)
-- [ ] Web dashboard
-- [ ] Mobile app
+- [x] **CI/CD Pipeline (GitHub Actions)**
+- [x] **AI Categorization v2 (Claude)**
+- [x] **Smart Notifications**
+- [x] **Health Check System**
+- [ ] **Увеличить покрытие тестами до 80%+**
+- [ ] **Реализовать E2E и нагрузочное тестирование**
+- [ ] **Добавить бюджетирование и финансовые цели**
+- [ ] **Реализовать веб-дашборд (опционально)**
 
-## 📊 Status
+## 🤝 Контрибьюция
 
-**Version**: 2.0.0  
-**Status**: Active Development  
-**Last Updated**: November 2025
+Пулл-реквесты приветствуются! Для крупных изменений, пожалуйста, сначала откройте issue для обсуждения.
+
+## 📝 Лицензия
+
+MIT License - см. файл `LICENSE` для подробностей.
 
 ---
 
-Made with ❤️ by the Midas Team
+**Сделано с ❤️ и AI для Павла Райдена**
