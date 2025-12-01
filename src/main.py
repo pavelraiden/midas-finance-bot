@@ -15,6 +15,8 @@ from aiogram.types import BotCommand
 sys.path.insert(0, str(Path(__file__).parent))
 
 from infrastructure.logging_config import setup_logging, get_logger
+from infrastructure.logging.structured_logger import StructuredLogger
+from infrastructure.monitoring import prometheus_metrics
 
 # Repositories
 from infrastructure.repositories.user_repository import UserRepository
@@ -45,6 +47,7 @@ from app.bot.handlers import start, transaction, wallet_management, categories, 
 # Setup logging
 setup_logging()
 logger = get_logger(__name__)
+structured_logger = StructuredLogger(__name__)
 
 # Load environment variables
 import os
@@ -69,9 +72,28 @@ async def setup_bot_commands(bot: Bot):
     await bot.set_my_commands(commands)
 
 
+async def start_metrics_server():
+    """Start Prometheus metrics server."""
+    from prometheus_client import start_http_server
+    import os
+    
+    metrics_port = int(os.getenv("METRICS_PORT", "8000"))
+    try:
+        start_http_server(metrics_port)
+        logger.info(f"Metrics server started on port {metrics_port}")
+        structured_logger.info("Metrics server started", port=metrics_port)
+    except Exception as e:
+        logger.error(f"Failed to start metrics server: {e}")
+        structured_logger.error("Failed to start metrics server", error=e, port=metrics_port)
+
+
 async def main():
     """Main bot function."""
     logger.info("Starting Midas Financial Bot...")
+    structured_logger.info("Bot startup initiated")
+    
+    # Start metrics server
+    await start_metrics_server()
     
     # Check for single instance
     from infrastructure.pid_manager import ensure_single_instance
@@ -85,6 +107,7 @@ async def main():
     
     # Initialize infrastructure
     logger.info("Initializing infrastructure...")
+    structured_logger.info("Infrastructure initialization started")
     
     # SQLite database
     logger.info("Using SQLite database")
@@ -203,6 +226,8 @@ async def main():
     
     # Start polling
     logger.info("Bot started successfully! Polling...")
+    structured_logger.info("Bot polling started")
+    # Metrics already initialized in prometheus_metrics module
     try:
         # Use drop_pending_updates=True to handle conflicts automatically
         await dp.start_polling(

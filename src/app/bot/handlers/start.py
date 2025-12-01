@@ -9,8 +9,12 @@ from aiogram.fsm.context import FSMContext
 from app.services.user_service import UserService
 from app.services.wallet_service import WalletService
 from infrastructure.logging_config import get_logger
+from infrastructure.logging.structured_logger import StructuredLogger
+from infrastructure.monitoring import prometheus_metrics
+import time
 
 logger = get_logger(__name__)
+structured_logger = StructuredLogger(__name__)
 
 router = Router()
 
@@ -56,6 +60,14 @@ async def cmd_start(
         user_service: User service
         wallet_service: Wallet service
     """
+    # Track metrics
+    start_time = time.time()
+    user_id_str = str(message.from_user.id)
+    
+    # Log request
+    structured_logger.log_bot_request(user_id=user_id_str, command="start")
+    prometheus_metrics.bot_requests_total.labels(command="start", user_id=user_id_str).inc()
+    
     # Clear any previous state
     await state.clear()
     
@@ -107,6 +119,15 @@ Choose an action from the menu below:
     )
     
     logger.info(f"User {user['id']} started bot")
+    
+    # Track completion
+    duration = time.time() - start_time
+    structured_logger.info(
+        "Start command completed",
+        user_id=user_id_str,
+        command="start",
+        duration=duration
+    )
 
 
 @router.message(Command("help"))
